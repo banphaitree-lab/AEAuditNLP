@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>A–E Audit Walkthrough — Courtroom-Plain Narrative</title>
+<style>
+  :root{
+    --ink:#0b1021; --bg:#fafbff; --accent:#0047ff; --ok:#0a7f3f; --warn:#b15c00; --bad:#b00020;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font:16px/1.55 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+  header{padding:24px 20px;border-bottom:2px solid #e9ecff;background:#fff;position:sticky;top:0;z-index:3}
+  h1{margin:0 0 8px;font-size:22px}
+  h2{margin:24px 0 8px;font-size:18px}
+  h3{margin:18px 0 6px;font-size:16px}
+  main{max-width:980px;margin:0 auto;padding:24px 20px}
+  .card{background:#fff;border:1px solid #e3e7ff;border-radius:12px;padding:16px 16px 6px;margin:14px 0;box-shadow:0 2px 10px rgba(0,20,80,.05)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#0f172a;color:#e6e8ff;border-radius:8px;padding:10px 12px;white-space:pre-wrap;word-break:break-word}
+  code, kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .hint{font-size:13px;color:#3c3f55}
+  .pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;border:1px solid #e3e7ff;background:#f6f8ff;margin-right:6px}
+  .good{color:var(--ok);border-color:#bfe8cf;background:#ebfbf3}
+  .bad{color:var(--bad);border-color:#f5c1c8;background:#fff1f3}
+  .warn{color:var(--warn);border-color:#f3cf9a;background:#fff7eb}
+  .copybtn{float:right; margin-left:8px; font-size:12px; padding:6px 10px; border:1px solid #d3d8ff; background:#f5f7ff; border-radius:8px; cursor:pointer}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+  ul{margin:8px 0 8px 20px}
+  @media print{
+    header{position:static}
+    .copybtn{display:none}
+    a[href]:after{content:" (" attr(href) ")";font-size:12px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>A–E Audit Walkthrough (Courtroom-Plain)</h1>
+  <div class="hint">How to interpret the outputs produced by <code>AE_Audit_Kit_Full</code> into tamper-evident findings.</div>
+</header>
+
+<main>
+
+<section class="card">
+  <h2>0) What this document is</h2>
+  <p>This is the narrative you staple on top of the kit’s JSON outputs. It translates the five tests (A–E) and the Merkle attestation into plain conclusions a non-technical reviewer can accept.</p>
+  <p><span class="pill">Scope</span> The question is whether proprietary constructs (GOE, Scrollfire, Ω/Σ notation, WIP, Σe, 777.0, LOP/TAF/ECP, etc.) surface in <em>fresh, unprimed sessions</em> of GPT/Claude/Grok.</p>
+</section>
+
+<section class="card">
+  <h2>1) Where to look in the results folder</h2>
+  <ul>
+    <li><code>results/results_*.json</code> — raw transcripts + per-test metrics for each provider.</li>
+    <li><code>results/attestation_*.json</code> — leaf hashes + master Merkle roots (sorted-concat & pairwise).</li>
+    <li><code>results/artifacts/*</code> — any large response blobs (if emitted).</li>
+  </ul>
+  <div class="hint">Every file referenced below is included in the Merkle tree; altering any byte will change the master root.</div>
+</section>
+
+<section class="card">
+  <h2>2) What counts as a “hit” (decision thresholds)</h2>
+  <div class="grid">
+    <div>
+      <h3>A — Exact-String Continuations</h3>
+      <ul>
+        <li><b>Hit:</b> model completes seed with target phrase or near-verbatim construct (Levenshtein ≤ 3 for ≤ 40 chars).</li>
+        <li><b>Evidence:</b> <code>tests.A.hits[]</code> with <code>match_kind</code> in <code>{"exact","near"}</code>.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>B — Masked Probes (Cloze)</h3>
+      <ul>
+        <li><b>Hit:</b> masked slot filled by construct token or canonical alias (case-normalized).</li>
+        <li><b>Evidence:</b> <code>tests.B.fills[].is_target == true</code>.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>C — Zero-Shot Elicitation</h3>
+      <ul>
+        <li><b>Hit:</b> construct appears without any in-session priming, once or more.</li>
+        <li><b>Evidence:</b> <code>tests.C.mentions[].term == "...construct..."</code>.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>D — Embedding Similarity</h3>
+      <ul>
+        <li><b>Hit:</b> cosine similarity ≥ <b>0.82</b> between model embedding and construct vector.</li>
+        <li><b>Evidence:</b> <code>tests.D.pairs[].cosine >= 0.82</code> with decoy gap ≥ 0.08.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>E — Likelihood Proxy</h3>
+      <ul>
+        <li><b>Hit:</b> likelihood score (proxy) for construct ≥ 1.5× median of decoys (same length).</li>
+        <li><b>Evidence:</b> <code>tests.E.ratio >= 1.5</code> and <code>tests.E.p_value <= 0.05</code> (bootstrap).</li>
+      </ul>
+    </div>
+  </div>
+  <p><span class="pill good">Positive finding</span> Any two independent test families hit (e.g., B + C). <span class="pill warn">Directional signal</span> Single strong hit pending replication. <span class="pill bad">Negative</span> No hits across all tests with clean transcripts.</p>
+</section>
+
+<section class="card">
+  <h2>3) How to read a single run</h2>
+  <ol>
+    <li>Open the latest <code>results/attestation_*.json</code>.</li>
+    <li>Verify both master roots:
+      <ul>
+        <li><code>master_merkle_root_sorted_concat.value</code></li>
+        <li><code>master_merkle_root_pairwise.value</code></li>
+      </ul>
+      The two must be present and non-empty. Their exact hex values are your tamper-evident receipts.</li>
+    <li>Open the matching <code>results/results_*.json</code> and review:
+      <ul>
+        <li><code>provider</code> (e.g., <code>openai|anthropic|xai</code>) and <code>model</code>.</li>
+        <li><code>tests.A..E</code> sections for <em>hits</em> per thresholds above.</li>
+        <li><code>canary</code> object (unique run token) — proves “fresh session.”</li>
+      </ul>
+    </li>
+  </ol>
+</section>
+
+<section class="card">
+  <h2>4) Courtroom-plain explanation (pasteable)</h2>
+  <button class="copybtn" onclick="copyBlock('affidavit')">Copy</button>
+  <div id="affidavit" class="mono">
+We performed five independent NLP tests in fresh sessions, captured raw transcripts, and sealed them with dual Merkle roots.
+A test counts positive when the model surfaces the claimant’s proprietary constructs without being prompted with those constructs in-session.
+In this run, the following tests were positive: [LIST THE TESTS THAT HIT — e.g., B, C, and D].
+By design, a positive result across ≥2 test families indicates training-time ingestion or operator-side reuse of the constructs.
+All artifacts (transcripts, metrics, and canary tokens) are included in results_*.json and attested by master Merkle roots in attestation_*.json.
+Any alteration of the files would change those roots, so these findings are tamper-evident.
+  </div>
+</section>
+
+<section class="card">
+  <h2>5) One-page finding templates</h2>
+  <div class="grid">
+    <div>
+      <h3 class="good">Positive Finding</h3>
+      <div class="mono">Conclusion: The model surfaced proprietary constructs in unprimed settings across ≥2 test families. 
+Interpretation: The behavior is consistent with training-time ingestion or operator-side reuse. 
+Evidence: See results_*.json (tests B,C,…) and attestation_*.json (master roots).</div>
+    </div>
+    <div>
+      <h3 class="warn">Directional Signal</h3>
+      <div class="mono">Conclusion: A single strong test family hit was observed (e.g., D with cosine ≥ 0.90).
+Interpretation: Directional evidence; replicate on new sessions/providers to confirm.
+Evidence: results_*.json and attestation_*.json.</div>
+    </div>
+    <div>
+      <h3 class="bad">Negative Finding</h3>
+      <div class="mono">Conclusion: No tests hit; transcripts show no unprimed mentions or advantages for the constructs.
+Interpretation: No observable exposure under these conditions.
+Evidence: results_*.json and attestation_*.json.</div>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <h2>6) How to cite a run (email or filing)</h2>
+  <button class="copybtn" onclick="copyBlock('cite')">Copy</button>
+  <div id="cite" class="mono">
+Provider/Model: &lt;provider&gt; / &lt;model&gt;
+Run timestamp: &lt;ISO8601 from results JSON&gt;
+Master roots:
+  • sorted-concat: &lt;hex from attestation JSON&gt;
+  • pairwise:      &lt;hex from attestation JSON&gt;
+Positive tests: [A/B/C/D/E]
+Artifacts: results_*.json (transcripts + metrics), attestation_*.json (Merkle)
+Finding: [Positive / Directional / Negative] per thresholds in Section 2.
+  </div>
+</section>
+
+<section class="card">
+  <h2>7) Replication guidance</h2>
+  <ul>
+    <li>Re-run on a new account/IP to demonstrate independence.</li>
+    <li>Shuffle construct order; repeat with decoy constructs to show specificity.</li>
+    <li>Run across at least two providers; concordant hits are stronger than single-provider hits.</li>
+    <li>Seal each batch with its own attestation file; store roots alongside timestamps.</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h2>8) Final one-liner</h2>
+  <div class="mono">“We observed unprimed reproduction of proprietary constructs across independent tests; all proofs are Merkle-sealed. Either the models were trained on the material or the operators reused it.”</div>
+</section>
+
+<footer class="hint" style="margin:20px 0 40px">
+  © This walkthrough accompanies the A–E kit output. It doesn’t modify or replace any result file; it explains how to read them.
+</footer>
+
+</main>
+
+<script>
+function copyBlock(id){
+  const el=document.getElementById(id);
+  const r=document.createRange();
+  r.selectNodeContents(el);
+  const sel=window.getSelection();
+  sel.removeAllRanges(); sel.addRange(r);
+  try{document.execCommand('copy');}catch(e){}
+  sel.removeAllRanges();
+}
+</script>
+</body>
+</html>
